@@ -1,11 +1,13 @@
 import React, { useState } from "react";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../firebase";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { auth, db, storage } from "../firebase";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { doc, setDoc } from "firebase/firestore"; 
 
 const Register = () => {
   const [err, setErr] = useState(false);
 
-  const handleSubmit = async(e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     const displayName = e.target[0].value;
@@ -13,16 +15,42 @@ const Register = () => {
     const password = e.target[2].value;
     const file = e.target[3].files[0];
 
-    try{
+    try {
+      const response = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
 
-      const response = await createUserWithEmailAndPassword(auth, email, password)
+      const storageRef = ref(storage, displayName);
 
-    }catch(err){
-      setErr(true)
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+
+      uploadTask.on(
+      
+        (error) => {
+          setErr(true)
+        },
+        () => {
+        
+          getDownloadURL(uploadTask.snapshot.ref).then( async(downloadURL) => {
+            await updateProfile(response.user,{
+              displayName,
+              photoURL: downloadURL,
+            });
+            await setDoc(doc(db, response.user.uid), {
+              uid: response.user.uid,
+              displayName,
+              email,
+              photoURL: downloadURL,
+            })
+          });
+        }
+      );
+    } catch (err) {
+      setErr(true);
     }
-
-
-    
   };
 
   return (
@@ -35,7 +63,7 @@ const Register = () => {
           <input type="email" placeholder="email" />
           <input type="password" placeholder="password " />
           <input style={{ display: "none" }} type="file" id="file" />
-          <label htmlFor="file">Select Avatar</label>
+          <label htmlFor="file">Add an Avatar</label>
           <button on>Sign Up</button>
           {err && <span>Something went wrong...</span>}
         </form>
